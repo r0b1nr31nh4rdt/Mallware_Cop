@@ -3,3 +3,5 @@
 .venv/
 .vscode
 __pycache__/
+Todo.md
+cache.json

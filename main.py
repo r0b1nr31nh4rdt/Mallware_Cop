@@ -1,34 +1,49 @@
-# Robin Reinhardt
-# OS Project 3
-# Proc Blart: Mallware Cop
-
-### Step 1: Real-Time Process Monitor
-
-# Start by building a Python script that continuously monitors running processes. Your monitor should:
-
-# - List active processes in real time
-# - For each process, display:
-#     - Process name
-#     - PID
-#     - CPU usage
-#     - Memory usage
-
-# Format the output clearly, and make it easy to observe system behavior over time.
-
-import psutil
-import time
-import hashlib
+import os
+import threading
+import queue
+import requests
 import json
+import time
 # from rich.live import Live
 from rich.table import Table
 from rich.console import Console
+from dotenv import load_dotenv
+from helper import get_processes, get_filepath, get_filehash, check_virustotal
 
-from helper import get_processes, get_filepath, get_filehash, compare_hashes
-
+load_dotenv()
+vt_queue = queue.Queue()
 console = Console()
 
+API_KEY = os.getenv("API_KEY")
 
 
+def vt_worker(api_key):
+    while True:
+        filehash, filepath = vt_queue.get()
+        result = check_virustotal(filehash, api_key)
+        with open('cache.json', 'r') as f:
+            cache = json.load(f)
+        cache[filehash] = result
+        with open('cache.json', 'w') as f:
+            json.dump(cache, f, indent=4)
+        time.sleep(15) # 4 per minute
+        vt_queue.task_done()
+
+thread = threading.Thread(target=vt_worker, args=(API_KEY,), daemon=True)
+thread.start()
+
+
+def compare_hashes(files):
+    print(f"Anzahl Hashes: {len(files)}")
+    with open('cache.json', 'r') as f:
+        cache = json.load(f)
+    for file in files:
+        # print(f"compare hash: {file["filehash"]}")
+        if file["filehash"] in cache:
+            result = cache[file["filehash"]]
+        else:
+            # if not in cache put in queue for api request
+            vt_queue.put((file["filehash"], file["filepath"]))
 
 
 def show_process_table(processes):
@@ -37,7 +52,6 @@ def show_process_table(processes):
     table.add_column("Name")
     table.add_column("CPU %")
     table.add_column("Memory (MB)")
-
     for p in processes:
         table.add_row(
             str(p.info['pid']),
@@ -45,48 +59,30 @@ def show_process_table(processes):
             str(p.info['cpu_percent']),
             str(round(p.info['memory_info'].rss /1024 /1024, 2))
         )
-
     console.print(table)
 
 
 def show_processes():
-    print("get active processes")
-
     processes = get_processes()
-    hashes = []
-
+    files = []
     if processes:
         show_process_table(processes)
-
         for p in processes:
             filepath = get_filepath(p)
-            # print(f"Filepath: {filepath}")
 
             if not filepath or  filepath.startswith(r"C:\Windows\System32"):
                 continue
-
             filehash = get_filehash(filepath)
-            hashes.append(filehash)
-            print(f"Hash Value: {filehash}")
-
+            if filehash:
+                files.append({"filepath": filepath, "filehash": filehash})
     else:
         print("nothing")
 
-    # print(f"Anzahl Hashes: {len(hashes)}")
+    if files:
+        compare_hashes(files)
 
-    if hashes:
-        compare_hashes(hashes)
-
-
-
-
-
-
-def get_virustotal_info(file_hash):
-    # API ansprechen
-    print("Hier findet der API Request statt")
-    print(f"Filehash: {file_hash}")
 
 if __name__ == "__main__":
-
-    show_processes()
+    while True:
+        show_processes()
+        time.sleep(60)  # Every minute scan again

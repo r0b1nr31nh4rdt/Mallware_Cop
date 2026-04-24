@@ -2,6 +2,7 @@ import psutil
 import time
 import hashlib
 import json
+import requests
 
 
 def get_processes():
@@ -11,52 +12,35 @@ def get_processes():
 def get_filepath(process):
     try:
         filepath = process.exe()
-        # print(filepath)
         return filepath
     except (psutil.AccessDenied, psutil.NoSuchProcess):
-        print("(kein Zugriff)")
-
+        return None
 
 
 def get_filehash(filepath):
-    # print(filepath)
-    # print("Open File")
     try:
         with open(filepath, 'rb') as f:
             return hashlib.sha256(f.read()).hexdigest()
     except (psutil.AccessDenied, psutil.NoSuchProcess):
-        print("(kein Zugriff)")
-    except TypeError as e:
-        print(f"TypeError bei: {filepath}")
-    except FileNotFoundError as e:
-        print(f"FileNotFound bei: {filepath}")
+        return None
+    except (TypeError, FileNotFoundError, PermissionError) as e:
+        return None
 
 
+def check_virustotal(filehash, api_key):
+    url = f"https://www.virustotal.com/api/v3/files/{filehash}"
+    headers = {"x-apikey": api_key}
+    response = requests.get(url, headers=headers)
 
-def compare_hashes(filehashes):
-    print(f"Anzahl Hashes: {len(filehashes)}")
-    # print(f"compare hashes")
-    # # read
-    with open('cache.json', 'r') as f:
-        cache = json.load(f)
-    # compare
-    for filehash in filehashes:
-        print(f"compare hash: {filehash}")
-        if filehash in cache:
-            result = cache[filehash]
-        else:
-            # api request
-            result = get_virustotal_info(filehash)
-            cache[filehash] = result
-            # add to cache if not yet inside
-            with open('cache.json', 'w') as f:
-                json.dump(cache, f)
-        return result
+    if response.status_code != 200:
+        print(f"Fehler beim Abrufen der Daten: {response.status_code}")
+        return None
 
+    data = response.json()
+    stats = data["data"]["attributes"]["last_analysis_stats"]
+    return {
+        "malicious": stats["malicious"],
+        "suspicious": stats["suspicious"],
+        "undetected": stats["undetected"]
+    }
 
-
-def get_virustotal_info(filehash):
-    # API ansprechen
-    print("Hier findet der API Request statt")
-    print(f"Filehash: {filehash}")
-    return "dummyvalue"
