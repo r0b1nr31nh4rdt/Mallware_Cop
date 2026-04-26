@@ -1,3 +1,5 @@
+# helper.py
+
 import psutil
 import time
 import hashlib
@@ -7,6 +9,14 @@ import requests
 
 def get_processes():
     return list(psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_info']))
+
+
+def load_cache():
+    try:
+        with open('cache.json', 'r') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return {}
 
 
 def get_filepath(process):
@@ -33,7 +43,7 @@ def check_virustotal(filehash, api_key):
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
-        print(f"Fehler beim Abrufen der Daten: {response.status_code}")
+        console.log(f"Fehler beim Abrufen der Daten: {response.status_code}")
         return None
 
     data = response.json()
