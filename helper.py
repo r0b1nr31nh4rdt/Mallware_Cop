@@ -11,6 +11,10 @@ def get_processes():
     return list(psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_info']))
 
 
+def get_badhash():
+    return hashlib.sha256(r"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*".encode()).hexdigest()
+
+
 def load_cache():
     try:
         with open('cache.json', 'r') as f:

@@ -10,7 +10,7 @@ from rich.live import Live
 from rich.table import Table
 from rich.console import Console
 from dotenv import load_dotenv
-from helper import get_processes, get_filepath, get_filehash, check_virustotal, load_cache
+from helper import get_processes, get_filepath, get_filehash, check_virustotal, load_cache, get_badhash
 
 load_dotenv()
 vt_queue = queue.Queue()
@@ -88,7 +88,12 @@ def collect_paths(processes):
         filepath = get_filepath(p)
         if not filepath or  filepath.startswith(r"C:\Windows\System32"):
             continue
-        filehash = get_filehash(filepath)
+
+        if p.info['name'] == "badhash.exe":
+            filehash = get_badhash()
+        else:
+            filehash = get_filehash(filepath)
+
         if filehash:
             files.append({"filepath": filepath, "filehash": filehash})
     if files:
@@ -107,8 +112,3 @@ if __name__ == "__main__":
             collect_paths(processes)
 
             time.sleep(60)  # Every minute scan again
-
-    # # Test
-    # eicar_hash = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"
-    # result = check_virustotal(eicar_hash, API_KEY)
-    # print(result)

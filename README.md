@@ -49,7 +49,13 @@ A super simple Python Script which does nothing else then
 - create an empty array
 - start a while true
 - append for each loop a string of 1.000.000 space-chars to the array ~1MB
+- when the array reaches a size of 500 MB it stops to fill it
 ```
-pyinstaller --onefile memhog.py
+pyinstaller --onefile --hidden-import psutil memhog.py
 ```
 
+### badhash.exe
+Similar to virus.exe but this file prozess get filtered by name and becomes the hash value from the EICAR testfile.
+```
+pyinstaller --onefile badhash.py
+```
