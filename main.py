@@ -69,7 +69,7 @@ def build_table(processes, cache):
         filehash = get_filehash(filepath) if filepath else None
         vt_result = cache.get(filehash) or {}
         malicious = str(vt_result.get("malicious"))
-        color = "red" if vt_result.get("malicious", 0) and vt_result.get("malicious", 0) > 0 else "white"
+        color = "red" if vt_result.get("malicious", 0) and vt_result.get("malicious", 0) > 0 else "green"
 
         table.add_row(
             str(p.info['pid']),

@@ -5,3 +5,7 @@
 __pycache__/
 Todo.md
 cache.json
+
+*.spec
+dist/
+build/
