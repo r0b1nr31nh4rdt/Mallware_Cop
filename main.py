@@ -37,6 +37,7 @@ logging.basicConfig(
 )
 
 API_KEY = os.getenv("API_KEY")
+SUSPICIOUS_NAMES = ["virus.exe", "malware.exe", "ransomware.exe"]
 
 
 def vt_worker(api_key):
@@ -133,7 +134,7 @@ def collect_paths(processes):
 def apply_policy(processes, cache, handled_pids):
     for p in processes:
         # virus.exe
-        if p.info['name'] == "virus.exe":
+        if p.info['name'] in SUSPICIOUS_NAMES:
             filepath = get_filepath(p)
             logging.warning(f"Suspicious process detected: {p.info['name']} (PID {p.info['pid']})")
             kill_suspicious_process(p.info['pid'])

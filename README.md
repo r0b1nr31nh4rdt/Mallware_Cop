@@ -1,8 +1,23 @@
 # OS Project 3 - Proc Blart: Mallware Cop
 
 
+
 ##  Real-Time Process Monitor with VirusTotal Check
 
+I use a table, which is self-updating instead of permanently write a new table after the old table in the console.
+The table shows the running processes and when one of the defined problems occurs it will change the color for the entry e.g.
+
+Like the project tasks required I included a filter
+- for process names,
+- memory usage,
+- VirusTotal values
+
+If one of this criteria is fullfilled the app perform the given reactions
+- kill and move to quarantine
+- log a warning
+- suspend, dump memory and move to quarantine
+
+The app is near realtime, I have implemented a 5 sec delay for each loop.
 
 
 ## Flowchart
@@ -13,7 +28,7 @@ flowchart TD
     C --> D[Get Filepath]
     D --> E{System Path?}
     E -->| Yes| F{More Processes?}
-    E -->| No| G[Calcualte Hash]
+    E -->| No| G[Calculate Hash]
     G --> H{Hash in Cache?}
     H -->| Yes| I[Use Cached Result]
     I --> F
@@ -23,6 +38,14 @@ flowchart TD
     F -->| Yes| C
     F -->| No| B
 ```
+
+## Reaction Policy
+The policy rules are defined in `main.py` in the `apply_policy()` function and can be easily adjusted:
+
+- `SUSPICIOUS_NAMES` - list of process names to kill and quarantine
+- Memory threshold: currently set to 500MB
+- VirusTotal threshold: currently set to > 3 detections
+
 
 ## Testfiles
 To create .exe-testfiles I used pyinstaller.
@@ -55,7 +78,7 @@ pyinstaller --onefile --hidden-import psutil memhog.py
 ```
 
 ### badhash.exe
-Similar to virus.exe but this file prozess get filtered by name and becomes the hash value from the EICAR testfile.
+Similar to virus.exe but this file process get filtered by name and becomes the hash value from the EICAR testfile.
 ```
 pyinstaller --onefile badhash.py
 ```
