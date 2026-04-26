@@ -9,3 +9,8 @@ cache.json
 *.spec
 dist/
 build/
+
+quarantine/
+*.log
+procdump.exe
+dumps/

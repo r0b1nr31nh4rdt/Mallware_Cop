@@ -10,11 +10,31 @@ from rich.live import Live
 from rich.table import Table
 from rich.console import Console
 from dotenv import load_dotenv
-from helper import get_processes, get_filepath, get_filehash, check_virustotal, load_cache
+import logging
+from helper import (
+    get_processes,
+    get_filepath,
+    get_filehash,
+    check_virustotal,
+    load_cache,
+    get_badhash,
+    kill_suspicious_process,
+    init_cache,
+    move_to_quarantine,
+    suspend_process,
+    memory_dump,
+    get_process_hash
+)
 
 load_dotenv()
 vt_queue = queue.Queue()
 console = Console()
+
+logging.basicConfig(
+    filename='mallware_cop.log',
+    level=logging.WARNING,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 API_KEY = os.getenv("API_KEY")
 
@@ -26,13 +46,15 @@ def vt_worker(api_key):
         with open('cache.json', 'r') as f:
             cache = json.load(f)
         if result:
+            result["filepath"] = filepath
             cache[filehash] = result
         else:
             cache[filehash] = {
                 "malicious": None,
                 "suspicious": None,
                 "undetected": None,
-                "reason": "not found on VirusTotal"
+                "reason": "not found on VirusTotal",
+                "filepath": filepath
             }
         with open('cache.json', 'w') as f:
             json.dump(cache, f, indent=4)
@@ -44,7 +66,7 @@ thread.start()
 
 
 def compare_hashes(files):
-    console.log(f"Anzahl Hashes: {len(files)}")
+    # console.log(f"Anzahl Hashes: {len(files)}")
     with open('cache.json', 'r') as f:
         cache = json.load(f)
     for file in files:
@@ -66,17 +88,28 @@ def build_table(processes, cache):
         filepath = get_filepath(p)
         if not filepath or  filepath.startswith(r"C:\Windows\System32"):
             continue
-        filehash = get_filehash(filepath) if filepath else None
+
+        filehash = get_process_hash(p, filepath)
+
         vt_result = cache.get(filehash) or {}
-        malicious = str(vt_result.get("malicious"))
-        color = "red" if vt_result.get("malicious", 0) and vt_result.get("malicious", 0) > 0 else "green"
+
+        # Table style
+        memory_mb = p.info['memory_info'].rss / 1024 / 1024
+        malicious_count = vt_result.get("malicious", 0)
+
+        if malicious_count and malicious_count > 0:
+            color = "red"
+        elif memory_mb > 500:
+            color = "yellow"
+        else:
+            color = "green"
 
         table.add_row(
             str(p.info['pid']),
             p.info['name'],
             str(p.info['cpu_percent']),
             str(round(p.info['memory_info'].rss /1024 /1024, 2)),
-            malicious,
+            str(malicious_count),
             style=color
         )
     return table
@@ -88,27 +121,68 @@ def collect_paths(processes):
         filepath = get_filepath(p)
         if not filepath or  filepath.startswith(r"C:\Windows\System32"):
             continue
-        filehash = get_filehash(filepath)
+
+        filehash = get_process_hash(p, filepath)
+
         if filehash:
             files.append({"filepath": filepath, "filehash": filehash})
     if files:
         compare_hashes(files)
 
 
+def apply_policy(processes, cache, handled_pids):
+    for p in processes:
+        # virus.exe
+        if p.info['name'] == "virus.exe":
+            filepath = get_filepath(p)
+            logging.warning(f"Suspicious process detected: {p.info['name']} (PID {p.info['pid']})")
+            kill_suspicious_process(p.info['pid'])
+            logging.warning(f"Killed process: {p.info['name']} (PID {p.info['pid']})")
+            if filepath:
+                move_to_quarantine(filepath)
+                logging.warning(f"Quarantined: {filepath}")
+
+        # Memory > 500 MB
+        memory_mb = p.info["memory_info"].rss /1024 /1024
+        if memory_mb > 500:
+            logging.warning(f"{p.info['name']} (PID {p.info['pid']}) uses {round(memory_mb, 2)}MB")
+
+        # VirusTotal > 3 detections
+        filepath = get_filepath(p)
+        filehash = get_process_hash(p, filepath)
+        vt_result = cache.get(filehash) or {}
+        malicious_count = vt_result.get("malicious", 0) or 0
+
+        if p.info['pid'] not in handled_pids and malicious_count > 3:
+            handled_pids.add(p.info['pid'])
+            logging.warning(f"VirusTotal detection: {p.info['name']} - {malicious_count} detections")
+            memory_dump(p.info['pid'])
+            suspend_process(p.info['pid'])
+            logging.warning(f"Suspended: {p.info['name']} (PID {p.info['pid']})")
+            if filepath:
+                move_to_quarantine(filepath)
+                logging.warning(f"Quarantined: {filepath}")
+
+
 if __name__ == "__main__":
+
+    handled_pids = set()
+
     with Live(refresh_per_second=1) as live:
         while True:
-            # Get processes, load Cache, update table
+            init_cache()
+            # Get processes, load Cache
             processes = get_processes()
             cache = load_cache()
+
+            # Filter
+            apply_policy(processes, cache, handled_pids)
+
+            # Update table
+            processes = sorted(processes, key=lambda p: p.info['memory_info'].rss, reverse=True)
             live.update(build_table(processes, cache))
 
             # Get paths, calculate hashs, actualize cache
             collect_paths(processes)
 
-            time.sleep(60)  # Every minute scan again
-
-    # # Test
-    # eicar_hash = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"
-    # result = check_virustotal(eicar_hash, API_KEY)
-    # print(result)
+            time.sleep(5)
